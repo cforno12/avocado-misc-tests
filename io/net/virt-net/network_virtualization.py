@@ -433,29 +433,39 @@ class NetworkVirtualization(Test):
             dev_id = self.find_device_id(mac)
             device_name = self.find_device(mac)
             slot = self.find_virtual_slot(dev_id)
+            networkinterface = NetworkInterface(device_name, self.local)
             if slot:
                 try:
                     for _ in range(self.num_of_dlpar):
                         self.drmgr_vnic_dlpar('-r', slot)
+                        if self.interface_present(device_name):
+                            self.fail("DLPAR remove did not remove interface")
                         self.drmgr_vnic_dlpar('-a', slot)
-                        self.wait_intrerface(device_name)
+                        self.wait_interface(device_name)
+                        try:
+                            networkinterface.add_ipaddr(device_ip, netmask)
+                            networkinterface.bring_up()
+                        except Exception:
+                            networkinterface.save(device_ip, netmask)
+                        if not wait.wait_for(networkinterface.is_link_up, timeout=120):
+                            self.fail("Unable to bring up the link on the Network \
+                            virtualized device")
+                        if networkinterface.ping_check(peer_ip, count=5) is not None:
+                            self.fail("dlpar has affected Network connectivity")
                 except CmdError as details:
                     self.log.debug(str(details))
                     self.fail("dlpar operation did not complete")
-                device = self.find_device(mac)
-                networkinterface = NetworkInterface(device, self.local)
-                try:
-                    networkinterface.add_ipaddr(device_ip, netmask)
-                except Exception:
-                    networkinterface.save(device_ip, netmask)
-                if not wait.wait_for(networkinterface.is_link_up, timeout=120):
-                    self.fail("Unable to bring up the link on the Network \
-                              virtualized device")
-                if networkinterface.ping_check(peer_ip, count=5) is not None:
-                    self.fail("dlpar has affected Network connectivity")
             else:
                 self.fail("slot not found")
         self.check_dmesg_error()
+
+    def interface_present(self, device_name):
+        for interface in netifaces.interfaces():
+                if device_name == interface:
+                    self.log.info("Network virtualized device %s is up",
+                                  device_name)
+                    return True
+        return False
 
     def test_backingdevremove(self):
         '''
@@ -811,7 +821,7 @@ class NetworkVirtualization(Test):
             interface_conf.write("KERNEL==vnic \n")
             interface_conf.write("NAME=vnic%s \n" % slot)
 
-    def wait_intrerface(self, device_name):
+    def wait_interface(self, device_name):
         """
         Wait till interface come up
         """
