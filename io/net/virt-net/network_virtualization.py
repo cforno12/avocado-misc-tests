@@ -78,8 +78,11 @@ class NetworkVirtualization(Test):
         cmd = 'lssyscfg -r sys  -F name'
         output = self.session_hmc.cmd(cmd)
         self.server = ''
+        lpar_split = self.lpar.split('-', maxsplit=1)
+        if(len(lpar_split) != 2):
+            self.cancel("LPAR name incorrectly formatted. Expecting: <name>-lp<#>")
         for line in output.stdout_text.splitlines():
-            if line in self.lpar:
+            if line == lpar_split[0]:
                 self.server = line
                 break
         if not self.server:
